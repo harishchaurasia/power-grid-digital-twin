@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+/* Brand tokens. Source of truth: docs/brand.md. Do not add hues here without
+   justification -- the palette is deliberately tight and Forge Red is an accent
+   only (alerts, critical state, CTAs). */
+:root {
+  /* Brand */
+  --forge-red: #ff3b00;
+  --void-black: #0b0c0f;
+
+  /* Surfaces */
+  --surface-1: #14151a;
+  --surface-2: #1c1e24;
+  --border: #2a2a2f;
+
+  /* Text */
+  --text-primary: #f5f5f7;
+  --text-secondary: #a0a3aa;
+  --text-tertiary: #6c6f76;
+
+  /* Status */
+  --status-nominal: #7ed957;
+  --status-warning: #f5a623;
+  --status-critical: #ff3b00;
+
+  /* Type */
+  --font-display: "Bebas Neue", sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+}
+
+/* Expose the tokens to Tailwind v4 utilities (bg-surface-1, text-secondary...). */
+@theme inline {
+  --color-forge-red: var(--forge-red);
+  --color-void-black: var(--void-black);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-status-nominal: var(--status-nominal);
+  --color-status-warning: var(--status-warning);
+  --color-status-critical: var(--status-critical);
+
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+
+  --radius-DEFAULT: 4px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  /* Transparent so the console composites over the Pixel-Streamed video.
+     Void Black shows through only where a panel sets it. */
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Standalone (no video behind): fall back to the scene base colour. */
+@media (scripting: none) {
+  body {
+    background: var(--void-black);
+  }
+}
+
+/* Brand motion: precise, no bounce or spring (docs/brand.md). */
+@media (prefers-reduced-motion: no-preference) {
+  .transition-brand {
+    transition: all 150ms ease-out;
+  }
+}
+
+/* Recharts injects focus outlines we don't want on non-interactive surfaces. */
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
+}

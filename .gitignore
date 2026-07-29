@@ -1,0 +1,23 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Secrets — the Anthropic/OpenAI key stays on the backend host, never in the repo
+.env
+.env.*
+!.env.example
+
+# macOS / shell noise
+.DS_Store
+.zsh_history
+
+# Stray empty scratch file
+claude session.txt
