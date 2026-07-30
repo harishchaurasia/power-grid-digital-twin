@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 
+import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
 
 import { useConsoleStore } from "@/lib/store";
@@ -12,5 +13,6 @@ import { useConsoleStore } from "@/lib/store";
 const INITIAL_STATE = useConsoleStore.getState();
 
 afterEach(() => {
+  cleanup();
   useConsoleStore.setState(INITIAL_STATE, true);
 });
