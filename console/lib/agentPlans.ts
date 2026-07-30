@@ -89,6 +89,20 @@ export function statedChoice(finalText: string | null): CoolingStage | null {
   return (match?.[1] as CoolingStage) ?? null;
 }
 
+/**
+ * True when the stage the agent named in prose is not the one its own tools rank
+ * highest. Lives here rather than in a component so the ranked table and the
+ * collapsed summary cannot reach different verdicts about the same answer.
+ */
+export function disagreesWithTools(
+  stated: CoolingStage | null,
+  plans: PlanOption[],
+): boolean {
+  const best = plans[0];
+  if (stated === null || best === undefined) return false;
+  return stated !== best.coolingStage;
+}
+
 export function formatUsd(value: number): string {
   const abs = Math.abs(value);
   const sign = value < 0 ? "−" : "";
