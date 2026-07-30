@@ -577,8 +577,35 @@ using unreal engine"). Not yet locked.
    panel takes its natural 321 px and the rail scrolls as the layout already intended. Verified at
    1000 px and 800 px viewport heights.
 
-   The console still has no test runner (adding one is a dependency decision, unasked), so this
-   verification lives in a scratchpad Playwright script rather than in the repo.
+11. **Console test runner (2026-07-29).** Added on user instruction, two layers, because the
+   defect record here is unambiguous: **every console defect this project has shipped was found by
+   looking at a render**, and every one passed typecheck, lint and build. Unit tests alone would
+   have caught none of them.
+
+   - **Vitest + jsdom + Testing Library** — 38 tests over `lib/`: `format` (units on every
+     measurement; `confidenceWindow` never collapsing a breached limit to fake precision),
+     `visualState` (determinism, heat cue saturating at the C57.91 limit, ONAN fans at exactly
+     zero, `alert` taken from backend status and never a local threshold), `store` (history
+     thinning/capping, state-change log bounds, `clearTimeline`, tool results attaching to their
+     call, local-provider flag), and `RecordedPlayer` (start/stop/dispose, the in-flight-fetch
+     guard, loop reset, resume after a second outage).
+   - **Playwright against the installed Chrome** (`channel: "chrome"` — no browser download) —
+     8 specs. The suite starts its own Vite server on **5174** with **no backend**, so "backend
+     unreachable" is the ambient condition rather than a mock; the handover spec starts a real
+     uvicorn and skips cleanly if `uv` is absent.
+
+   **Each regression test was proven against the bug it names**, by reverting the fix and watching
+   it fail — a guard that cannot fail is decoration:
+   - reverting `RecordedPlayer.stop()`/the `running` guard → 2 unit tests fail
+   - reverting `shrink-0` and the projection `flex-wrap` → all 3 layout specs fail, naming the
+     spilling elements (`SPAN "Time to 120 °C" spills 13px`, `P "Band: …" spills 50px`)
+
+   `make test` now runs pytest + vitest (fast, no servers); `make test-e2e` is separate because it
+   binds ports. 63 backend + 38 unit + 8 e2e, all green.
+
+   ⚠️ **Known rough edge:** with no backend, Vite logs a wall of `ECONNREFUSED` proxy errors during
+   the e2e run. That is the condition under test, not a failure, but it buries the results — worth
+   a proxy `configure` handler before this is in CI.
 
 11. **Blocked / still pending.**
    - **Frontier model for the agent.** The agent layer is built and provider-agnostic (item 9);

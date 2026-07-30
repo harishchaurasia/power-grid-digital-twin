@@ -27,5 +27,5 @@
     "baseUrl": ".",
     "paths": { "@/*": ["./*"] }
   },
-  "include": ["app", "components", "lib"]
+  "include": ["app", "components", "lib", "test"]
 }

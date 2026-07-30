@@ -3,7 +3,7 @@ UV := uv run --python $(PY)
 BACKEND := cd backend &&
 CONSOLE := cd console &&
 
-.PHONY: dev backend console sim typecheck lint test install build record
+.PHONY: dev backend console sim typecheck lint test test-e2e install build record
 
 install:
 	$(BACKEND) uv sync --python $(PY) --extra dev --extra api --extra sim --extra agent
@@ -34,8 +34,16 @@ build:
 record:
 	$(BACKEND) $(UV) --extra api --extra agent python -m sim.record
 
+# Backend physics + console unit/component tests. Fast; no servers needed.
 test:
 	$(BACKEND) $(UV) --extra dev --extra api --extra agent pytest -q
+	$(CONSOLE) npm run test
+
+# Browser-level flows in real Chrome. Separate target because it starts its own
+# Vite server (and a backend, for the live-handover spec), so it is slower and
+# needs the ports free. Uses the installed Chrome -- no browser download.
+test-e2e:
+	$(CONSOLE) npm run test:e2e
 
 lint:
 	$(BACKEND) $(UV) --extra dev ruff check .

@@ -145,7 +145,11 @@ Defined as the project scaffolds (Phase 0 in `docs/build-plan.md`). Expected tar
 - `make sim` — run the simulation core standalone (headless, for physics validation)
 - `make typecheck` — tsc + pyright
 - `make lint` — eslint + ruff
-- `make test` — all tests, including physics-validation tests
+- `make test` — physics-validation tests (pytest) + console unit/component tests (vitest)
+- `make test-e2e` — browser-level flows in real Chrome (Playwright). Starts its own Vite server
+  and, for the live-handover spec, a backend; needs ports 5174/8000 free. Uses the *installed*
+  Chrome, so no browser download.
+- `make record` — capture a scenario run to static JSON for the console's offline fallback
 - Unreal builds via UE tooling (documented in `docs/architecture.md`), not `make`.
 
 ## Always do

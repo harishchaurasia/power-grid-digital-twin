@@ -10,6 +10,12 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Playwright artifacts
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # Secrets — the Anthropic/OpenAI key stays on the backend host, never in the repo
 .env
 .env.*
