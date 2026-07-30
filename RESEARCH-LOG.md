@@ -530,10 +530,37 @@ using unreal engine"). Not yet locked.
    clobbering live state. The reconnect path is the one nobody watches in a demo and the one most
    likely to run during a bad-network pitch.
 
-   ⚠️ **Verified by typecheck/lint/production build, not yet in a browser.** The console has no
-   test runner (adding one is a dependency decision, unasked). Both paths still need the
-   Chrome pass this project's own standard demands — `?mode=recorded`, and backend-killed →
-   fallback → backend-restarted → live handover.
+   **Verified in real Chrome (2026-07-29)**, driven by Playwright against the installed browser
+   (`channel="chrome"`) from an ephemeral `uv` env — nothing added to project deps. 13 of 14
+   assertions pass; the 14th is a test-clock artifact, traced and dismissed with evidence (a
+   projection poll issued while the backend was still down, whose 500 landed at t=+0.00s as
+   readiness flipped; every poll after is 200, and `fetchProjection`'s catch keeps the last band).
+   - `?mode=recorded`: chip reads Recorded, telemetry advances, controls disabled, V&V populated
+     from the recording, and **zero `/api/` requests** — the guard genuinely bypasses the backend.
+   - Backend killed → falls back in **1.8 s**; restarted → hands back to Live in **2.8 s**,
+     controls re-enable, chart vertices drop 101 → 31 (the timeline reset), and hot-spot holds
+     96.5 °C ±0.00 across 12 samples — the interleaving defect above is confirmed fixed.
+
+   ⚠️ **Two of the three re-runs failed on the harness, not the app** — a case-sensitive compare
+   against a CSS-uppercased chip, and `count("L")` on recharts paths that are cubic Béziers (`C`).
+   A third "failure" was a 3 s sample sitting inside the recording's flat opening. Worth recording
+   because each looked like a product bug for a minute: **the recording is genuinely motionless for
+   its first ~7 s** (60 settle frames + thermal lag before the 1.2 h trigger). Live that is correct
+   physics; as the *fallback* a prospect meets first, it reads as a frozen dashboard. Consider
+   starting playback nearer the trigger — a product call, not a bug.
+
+   **Defect found by looking at the render, not by any check** (all static checks were green, and
+   it is not fallback-specific — live mode has it too): the side rails are `overflow-y-auto` flex
+   columns, but `Panel`'s `<section>` had no `shrink-0`, so flexbox compressed the box to 241 px
+   while its content kept its natural ~308 px and **spilled past the border onto the panel below**
+   (`overflow: visible`). The casualty was the `Band: weather + load forecast error propagated
+   through C57.91` line — the one that names the uncertainty basis, which
+   `credibility-checklist.md` requires in-product. Fixed with `shrink-0` in `components/Panel.tsx`;
+   panel takes its natural 321 px and the rail scrolls as the layout already intended. Verified at
+   1000 px and 800 px viewport heights.
+
+   The console still has no test runner (adding one is a dependency decision, unasked), so this
+   verification lives in a scratchpad Playwright script rather than in the repo.
 
 11. **Blocked / still pending.**
    - **Frontier model for the agent.** The agent layer is built and provider-agnostic (item 9);

@@ -16,8 +16,11 @@ export interface PanelProps {
 
 export function Panel({ title, standard, actions, children, className = "" }: PanelProps) {
   return (
+    // shrink-0: the side rails are `overflow-y-auto` flex columns, so without it
+    // flexbox compresses the section box while its content keeps its natural
+    // height and spills past the border onto the panel below. Rails scroll.
     <section
-      className={`flex flex-col rounded border border-border bg-surface-1/95 backdrop-blur-sm ${className}`}
+      className={`flex shrink-0 flex-col rounded border border-border bg-surface-1/95 backdrop-blur-sm ${className}`}
     >
       <header className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-3">
         <div className="flex items-baseline gap-3">
