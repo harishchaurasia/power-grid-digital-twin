@@ -43,11 +43,14 @@ export function Panel({ title, standard, actions, children, className = "" }: Pa
 
 export interface CaptionProps {
   children: ReactNode;
+  className?: string;
 }
 
-export function Caption({ children }: CaptionProps) {
+export function Caption({ children, className = "" }: CaptionProps) {
   return (
-    <span className="text-[12px] font-medium uppercase tracking-[0.05em] text-text-tertiary">
+    <span
+      className={`text-[12px] font-medium uppercase tracking-[0.05em] text-text-tertiary ${className}`}
+    >
       {children}
     </span>
   );

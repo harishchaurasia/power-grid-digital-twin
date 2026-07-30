@@ -137,10 +137,13 @@ export function ProjectionChart() {
       </div>
 
       <div className="mt-2 border-t border-border/60 pt-2">
-        <div className="flex items-baseline justify-between gap-3">
-          <Caption>Time to {projection.limit_c} °C</Caption>
+        {/* flex-wrap + nowrap on both items: label and window don't fit side by
+            side in a 340px rail, so the window drops to its own line whole
+            rather than breaking mid-value ("... – 2.3" / "h)"). */}
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <Caption className="whitespace-nowrap">Time to {projection.limit_c} °C</Caption>
           <span
-            className={`font-mono text-[12px] tabular-nums ${
+            className={`whitespace-nowrap font-mono text-[14px] font-medium tabular-nums ${
               window.already_breached ? "text-forge-red" : "text-text-primary"
             }`}
           >
