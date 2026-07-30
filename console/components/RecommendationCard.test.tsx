@@ -126,3 +126,47 @@ describe("close", () => {
     expect(screen.queryByRole("button", { name: /expand recommendation/i })).not.toBeInTheDocument();
   });
 });
+
+describe("keyboard and assistive technology", () => {
+  it("links each control to the region it controls", () => {
+    seedRecommendation({ plans: OFAF_BEST, final: FINAL_SAYS_OFAF });
+    renderCard();
+
+    const minimizeButton = screen.getByRole("button", { name: "Minimize recommendation" });
+    expect(minimizeButton).toHaveAttribute("aria-expanded", "true");
+    const bodyId = minimizeButton.getAttribute("aria-controls");
+    expect(bodyId).toBeTruthy();
+    expect(document.getElementById(bodyId ?? "")).toBeInTheDocument();
+
+    minimize();
+    const bar = screen.getByRole("button", { name: /expand recommendation/i });
+    expect(bar).toHaveAttribute("aria-expanded", "false");
+    expect(bar).toHaveAttribute("aria-controls", bodyId);
+  });
+
+  it("moves focus to the collapsed bar so the keyboard does not lose its place", () => {
+    seedRecommendation({ plans: OFAF_BEST, final: FINAL_SAYS_OFAF });
+    renderCard();
+    minimize();
+
+    expect(screen.getByRole("button", { name: /expand recommendation/i })).toHaveFocus();
+  });
+
+  it("moves focus into the card on expand", () => {
+    seedRecommendation({ plans: OFAF_BEST, final: FINAL_SAYS_OFAF });
+    renderCard();
+    minimize();
+    fireEvent.click(screen.getByRole("button", { name: /expand recommendation/i }));
+
+    expect(screen.getByRole("heading", { name: "Recommendation" })).toHaveFocus();
+  });
+
+  it("does not steal focus when a card first appears", () => {
+    // Focus belongs to whatever the operator was doing; an arriving panel must
+    // not grab it.
+    seedRecommendation({ plans: OFAF_BEST, final: FINAL_SAYS_OFAF });
+    renderCard();
+
+    expect(document.body).toHaveFocus();
+  });
+});

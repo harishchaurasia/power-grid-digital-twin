@@ -4,6 +4,8 @@
  * markup for each state.
  */
 
+import type { Ref } from "react";
+
 import { formatUsd } from "@/lib/agentPlans";
 import type { PlanOption } from "@/lib/agentPlans";
 import { PROSE_REPLACED_BY_TABLE } from "@/lib/agentNarrative";
@@ -34,6 +36,7 @@ interface RecommendationHeaderProps {
   provider: AgentProvider | null;
   toolCount: number;
   bodyId: string;
+  headingRef: Ref<HTMLHeadingElement>;
   onMinimize: () => void;
   onDismiss: () => void;
 }
@@ -43,13 +46,19 @@ export function RecommendationHeader({
   provider,
   toolCount,
   bodyId,
+  headingRef,
   onMinimize,
   onDismiss,
 }: RecommendationHeaderProps) {
   return (
     <header className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-2">
       <div className="flex items-baseline gap-3">
-        <h2 className="font-display text-[20px] tracking-[0.03em] text-text-primary">
+        {/* tabIndex/outline-none: a programmatic focus target for expand, not a tab stop. */}
+        <h2
+          ref={headingRef}
+          tabIndex={-1}
+          className="font-display text-[20px] tracking-[0.03em] text-text-primary outline-none"
+        >
           Recommendation
         </h2>
         {provider ? (
@@ -112,6 +121,7 @@ export function AgentNarrative({ sections }: AgentNarrativeProps) {
 }
 
 interface CollapsedSummaryProps {
+  ref: Ref<HTMLButtonElement>;
   best: PlanOption | undefined;
   disagrees: boolean;
   local: boolean;
@@ -125,9 +135,10 @@ interface CollapsedSummaryProps {
  * nothing here to check a claim against, so an untraceable number would be worse
  * than no number.
  */
-export function CollapsedSummary({ best, disagrees, local, bodyId, onExpand }: CollapsedSummaryProps) {
+export function CollapsedSummary({ ref, best, disagrees, local, bodyId, onExpand }: CollapsedSummaryProps) {
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onExpand}
       aria-expanded={false}

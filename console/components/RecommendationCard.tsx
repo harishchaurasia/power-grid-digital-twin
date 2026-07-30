@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import type { Ref } from "react";
 
 import { disagreesWithTools, extractPlans, statedChoice } from "@/lib/agentPlans";
 import type { PlanOption } from "@/lib/agentPlans";
@@ -102,6 +104,20 @@ export interface RecommendationCardProps {
 
 export function RecommendationCard({ send }: RecommendationCardProps) {
   const state = useRecommendationState();
+  const collapsedRef = useRef<HTMLButtonElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  // Focus moves imperatively, inside this handler, rather than via an effect:
+  // reading a ref during render is banned by this project's react-hooks/refs
+  // rule, and flushSync guarantees the target branch has committed before the
+  // .focus() call runs. Because this only ever runs from a click, an arriving
+  // analysis (which re-expands via render-time state adjustment, not this
+  // function) never moves focus on its own.
+  const toggle = (next: boolean) => {
+    flushSync(() => state.setMinimized(next));
+    if (next) collapsedRef.current?.focus();
+    else headingRef.current?.focus();
+  };
 
   if (state.running) return <AgentAnalysing toolCount={state.toolCount} />;
 
@@ -110,32 +126,43 @@ export function RecommendationCard({ send }: RecommendationCardProps) {
   if (state.minimized) {
     return (
       <CollapsedSummary
+        ref={collapsedRef}
         best={state.best}
         disagrees={state.disagrees}
         local={state.provider?.local ?? false}
         bodyId={state.bodyId}
-        onExpand={() => state.setMinimized(false)}
+        onExpand={() => toggle(false)}
       />
     );
   }
 
-  return <ExpandedRecommendation state={state} send={send} />;
+  return (
+    <ExpandedRecommendation
+      state={state}
+      send={send}
+      headingRef={headingRef}
+      onMinimize={() => toggle(true)}
+    />
+  );
 }
 
 interface ExpandedRecommendationProps {
   state: RecommendationState;
   send: (message: ClientMessage) => void;
+  headingRef: Ref<HTMLHeadingElement>;
+  onMinimize: () => void;
 }
 
 /** The full card: header, local-model caveat, narrative, and ranked options. */
-function ExpandedRecommendation({ state, send }: ExpandedRecommendationProps) {
+function ExpandedRecommendation({ state, send, headingRef, onMinimize }: ExpandedRecommendationProps) {
   return (
     <section className="pointer-events-auto flex max-h-full min-h-0 flex-col self-end rounded border border-border border-l-2 border-l-forge-red bg-surface-1/95 backdrop-blur-sm">
       <RecommendationHeader
         provider={state.provider}
         toolCount={state.toolCount}
         bodyId={state.bodyId}
-        onMinimize={() => state.setMinimized(true)}
+        headingRef={headingRef}
+        onMinimize={onMinimize}
         onDismiss={state.dismiss}
       />
 
