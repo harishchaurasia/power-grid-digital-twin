@@ -543,11 +543,29 @@ using unreal engine"). Not yet locked.
 
    ⚠️ **Two of the three re-runs failed on the harness, not the app** — a case-sensitive compare
    against a CSS-uppercased chip, and `count("L")` on recharts paths that are cubic Béziers (`C`).
-   A third "failure" was a 3 s sample sitting inside the recording's flat opening. Worth recording
-   because each looked like a product bug for a minute: **the recording is genuinely motionless for
-   its first ~7 s** (60 settle frames + thermal lag before the 1.2 h trigger). Live that is correct
-   physics; as the *fallback* a prospect meets first, it reads as a frozen dashboard. Consider
-   starting playback nearer the trigger — a product call, not a bug.
+   A third "failure" was a 3 s sample sitting inside the recording's flat opening — which turned
+   out to be a real product problem, fixed below.
+
+   **Opening dead air fixed (same day): 7.0 s → 2.4 s.** The recording was motionless for its first
+   ~7 s, which as the *fallback a prospect meets first* reads as a broken demo. Measured where it
+   came from rather than guessing: 6.0 s was a scripted pre-trigger baseline and ~1.0 s is the
+   scenario's smoothstep toe plus winding lag. The twin is already at thermal equilibrium at t=0
+   (0.0185 °C drift across those 60 frames), so **the baseline was buying nothing physically** — it
+   was not a settling requirement. `BASELINE_HOURS` 1.2 → 0.3 h; `HEAT_HOURS`/`RECOVERY_HOURS` now
+   name the other two beats and `TRIGGER_AT_HOURS`/`INTERVENE_AT_HOURS`/`TOTAL_HOURS` derive from
+   them, so the offsets can't drift apart. (`SETTLE_HOURS` was dead code — declared, never read.)
+   The ~1 s of smoothstep toe is left alone: that one is physics.
+
+   Peak hot-spot is **unchanged at 142.7 °C** and the nominal → critical → OFAF-relief arc is
+   intact — the loop is just 40.6 s instead of 45.1 s (318 kB, down from 362 kB). Confirmed in
+   Chrome, not just in the capture log: hot-spot moves at t≈2.2 s and climbs steadily
+   (96.5 → 98.1 °C by 4.6 s).
+
+   `tests/test_record.py` (5 tests) holds this: opening motion within a 3 s budget, a beat of
+   nominal state still present, the arc still reaching critical and recovering under OFAF,
+   monotonic sim time, and projections that still carry a widening CI band. `make record` now
+   prints the measured opening against the budget, so a longer baseline cannot creep back
+   unnoticed. 63 backend tests.
 
    **Defect found by looking at the render, not by any check** (all static checks were green, and
    it is not fallback-specific — live mode has it too): the side rails are `overflow-y-auto` flex

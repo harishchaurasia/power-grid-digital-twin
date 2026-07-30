@@ -23,12 +23,29 @@ from sim.validation import transformer_validation_report
 SIM_HOURS_PER_TICK = 0.02
 TWINNING_RATE_HZ = 10.0
 
-#: Scripted beats, in sim-hours: settle, event, then the operator intervention.
-SETTLE_HOURS = 1.2
-TRIGGER_AT_HOURS = 1.2
-INTERVENE_AT_HOURS = 5.6
+#: The console prints hot-spot to one decimal, so a change reads as motion at
+#: roughly this magnitude.
+VISIBLE_DELTA_C = 0.1
+
+#: A prospect who meets the fallback first must see a twin that moves, not a
+#: frozen dashboard. `main()` prints the measured opening and
+#: `tests/test_record.py` holds it, so a longer baseline cannot creep back in.
+OPENING_MOTION_BUDGET_S = 3.0
+
+#: Scripted beats, in sim-hours. The twin is already at thermal equilibrium at
+#: t=0, so the opening baseline is a narrative beat -- long enough to read the
+#: nominal state, short enough to stay inside the budget above. It is not a
+#: settling requirement, which is why it is this brief.
+BASELINE_HOURS = 0.3
+#: Trigger -> intervention. Drives the arc: hot-spot into the critical band.
+HEAT_HOURS = 4.4
+#: Intervention -> end, so playback shows OFAF pulling hot-spot back down.
+RECOVERY_HOURS = 3.4
+
+TRIGGER_AT_HOURS = BASELINE_HOURS
+INTERVENE_AT_HOURS = BASELINE_HOURS + HEAT_HOURS
 INTERVENE_STAGE = CoolingStage.OFAF
-TOTAL_HOURS = 9.0
+TOTAL_HOURS = INTERVENE_AT_HOURS + RECOVERY_HOURS
 
 PROJECTION_EVERY_HOURS = 0.5
 PROJECTION_HORIZON_HOURS = 6.0
@@ -91,17 +108,34 @@ def capture() -> dict[str, Any]:
     }
 
 
+def opening_dead_air_seconds(frames: list[dict[str, Any]]) -> float:
+    """Playback seconds before hot-spot visibly moves off its opening value.
+
+    One definition shared by `main()`'s report and the test that holds the
+    budget, so the two cannot disagree about what "motion" means.
+    """
+    start = frames[0]["transformer"]["hot_spot_c"]
+    for index, frame in enumerate(frames):
+        if abs(frame["transformer"]["hot_spot_c"] - start) >= VISIBLE_DELTA_C:
+            return index / TWINNING_RATE_HZ
+    return len(frames) / TWINNING_RATE_HZ
+
+
 def main() -> None:
     data = capture()
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(json.dumps(data, separators=(",", ":")))
 
-    peak = max(f["transformer"]["hot_spot_c"] for f in data["frames"])
+    frames = data["frames"]
+    peak = max(f["transformer"]["hot_spot_c"] for f in frames)
+    dead_air = opening_dead_air_seconds(frames)
     size_kb = OUTPUT_PATH.stat().st_size / 1024
     print(f"wrote {OUTPUT_PATH.relative_to(Path.cwd().parent)}  ({size_kb:.0f} kB)")
-    print(f"  frames      : {len(data['frames'])}")
-    print(f"  projections : {len(data['projections'])}")
+    print(f"  frames       : {len(frames)}  ({len(frames) / TWINNING_RATE_HZ:.1f} s loop)")
+    print(f"  projections  : {len(data['projections'])}")
     print(f"  peak hot-spot: {peak:.1f} degC")
+    print(f"  opening      : {dead_air:.1f} s to visible motion "
+          f"(budget {OPENING_MOTION_BUDGET_S:.1f} s)")
 
 
 if __name__ == "__main__":
