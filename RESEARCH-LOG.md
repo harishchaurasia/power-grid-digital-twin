@@ -607,7 +607,28 @@ using unreal engine"). Not yet locked.
    the e2e run. That is the condition under test, not a failure, but it buries the results — worth
    a proxy `configure` handler before this is in CI.
 
-11. **Blocked / still pending.**
+12. **Recommendation card minimize (2026-07-29).** `Close` was the only way to clear the card, and
+   it discards the analysis — so seeing the twin meant losing the reasoning and re-running the
+   agent. Minimize collapses it to a one-line row that keeps its conclusion; `Close` is unchanged.
+
+   **The collapsed headline is read from `simulate_forward` tool output, never from the prose.**
+   Expanded, the ranked table sits beside the narrative and contradicts it where they differ.
+   Collapsed there is no table, so a prose-derived figure would be an unchecked claim in the most
+   glanceable element in the UI — and §9 records the agent reporting ONAN's net value as
+   −$508,679.65 when its own tool returned +$508,679.65. Where the prose names a different stage
+   than the tools rank first, the collapsed bar says so; with no extractable plan it shows no
+   number at all rather than inventing one. The `disagreesWithTools` predicate moved out of
+   `RankedOptions` into `lib/agentPlans.ts` so the two views cannot reach different verdicts.
+
+   Spec: `docs/superpowers/specs/2026-07-29-recommendation-card-minimize-design.md`.
+   13 component tests in `RecommendationCard.test.tsx`, 55 vitest tests total across 6 files,
+   and 10 Playwright specs total (2 new in `e2e/recommendation.spec.ts` plus 8 pre-existing); the
+   e2e hit-test found a Suspense-wrapper artifact — `elementFromPoint` returned the lazy-load
+   boundary `<div>` before the 3D scene canvas mounted, so the "expanded → not CANVAS" assertion
+   passed vacuously whether or not a canvas ever rendered. Flaky 3 of 5 runs until fixed by
+   waiting for the canvas before hit-testing.
+
+13. **Blocked / still pending.**
    - **Frontier model for the agent.** The agent layer is built and provider-agnostic (item 9);
      what is missing is a hosted key. Local `qwen2.5:7b` fabricated numbers in two distinct ways,
      which breaks the one discipline that *is* the differentiator. Development only.
