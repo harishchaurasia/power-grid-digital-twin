@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { RecommendationCard } from "@/components/RecommendationCard";
@@ -64,8 +64,12 @@ describe("collapsed", () => {
     minimize();
 
     const bar = screen.getByRole("button", { name: /expand recommendation/i });
-    expect(bar).toHaveTextContent("OFAF");
-    expect(bar).toHaveTextContent("$509k");
+    // Exact text via getByText, not toHaveTextContent's substring match:
+    // toHaveTextContent("$509k") would also pass against a rendered "−$509k",
+    // since "−$509k".includes("$509k") is true. A substring probe cannot
+    // distinguish a correct figure from a sign-flipped one -- the exact
+    // RESEARCH-LOG.md §9 failure mode -- so the assertion has to be exact.
+    expect(within(bar).getByText(`OFAF · ${formatUsd(508_680)}`)).toBeInTheDocument();
   });
 
   it("takes the headline from tool output even when the prose names another stage", () => {
@@ -75,20 +79,25 @@ describe("collapsed", () => {
     // so an implementation that takes the stage from tools but the figure from
     // prose (falling back to tools only when prose has no figure) would render
     // "−$508,680" here and pass a stage-only check while still fabricating the
-    // number. Asserting both the tool-derived figure is present and the
-    // prose-derived one is absent catches that case; a prose-reading
-    // implementation fails the second assertion, and a broken one that never
-    // renders a tool figure at all fails the first.
+    // number.
+    //
+    // The figure assertions below must use exact text (getByText), not
+    // toHaveTextContent's substring match: formatUsd(-508_680) is "−$509k",
+    // and "−$509k".includes("$509k") is true, so toHaveTextContent(formatUsd
+    // (508_680)) would pass whether the rendered figure was "$509k" or the
+    // sign-flipped "−$509k" -- exactly the fabrication this test exists to
+    // catch. Only an exact match on the full rendered figure (stage included,
+    // since that is what CollapsedFigure actually renders as one text node)
+    // can tell the two apart.
     seedRecommendation({ plans: OFAF_BEST, final: FINAL_SAYS_ONAN });
     renderCard();
     minimize();
 
     const bar = screen.getByRole("button", { name: /expand recommendation/i });
-    expect(bar).toHaveTextContent("OFAF");
     expect(bar).not.toHaveTextContent("ONAN");
     expect(bar).toHaveTextContent(/disagrees/i);
-    expect(bar).toHaveTextContent(formatUsd(508_680));
-    expect(bar).not.toHaveTextContent("508,680");
+    expect(within(bar).getByText(`OFAF · ${formatUsd(508_680)}`)).toBeInTheDocument();
+    expect(within(bar).queryByText(`OFAF · ${formatUsd(-508_680)}`)).not.toBeInTheDocument();
   });
 
   it("shows a breach marker when the recommended plan breaches the limit", () => {
