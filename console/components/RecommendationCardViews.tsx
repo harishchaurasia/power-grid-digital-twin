@@ -153,17 +153,14 @@ export function CollapsedSummary({ ref, best, disagrees, local, bodyId, onExpand
         <span className="font-display text-[20px] tracking-[0.03em] text-text-primary">
           Recommendation
         </span>{" "}
-        {best ? (
-          <span className="font-mono text-[14px] font-medium tabular-nums text-text-primary">
-            {best.coolingStage} · {formatUsd(best.netValueUsd)}
-          </span>
-        ) : (
+        {best ? <CollapsedFigure plan={best} /> : (
           <span className="text-[13px] text-text-secondary">ready</span>
         )}
       </span>
 
       <span className="flex items-baseline gap-3">
         {local ? <span className="text-[12px] text-status-warning">Local model</span> : null}
+        {best?.breachesLimit ? <span className="text-[12px] text-forge-red">breach</span> : null}
         {disagrees ? (
           <span className="text-[12px] text-status-warning">prose disagrees</span>
         ) : null}
@@ -180,5 +177,27 @@ export function CollapsedSummary({ ref, best, disagrees, local, bodyId, onExpand
         </svg>
       </span>
     </button>
+  );
+}
+
+interface CollapsedFigureProps {
+  plan: PlanOption;
+}
+
+/**
+ * The recommended stage and its net value, coloured to match `RankedOptions`'
+ * treatment of the same figure -- a negative net value is Forge Red in both
+ * places, so the collapsed bar and the expanded table never disagree about
+ * what the number means.
+ */
+function CollapsedFigure({ plan }: CollapsedFigureProps) {
+  return (
+    <span
+      className={`font-mono text-[14px] font-medium tabular-nums ${
+        plan.netValueUsd < 0 ? "text-forge-red" : "text-text-primary"
+      }`}
+    >
+      {plan.coolingStage} · {formatUsd(plan.netValueUsd)}
+    </span>
   );
 }

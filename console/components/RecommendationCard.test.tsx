@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { RecommendationCard } from "@/components/RecommendationCard";
+import { formatUsd } from "@/lib/agentPlans";
 import { seedRecommendation } from "@/test/agentFixtures";
 
 const OFAF_BEST = [
@@ -9,8 +10,22 @@ const OFAF_BEST = [
   { stage: "ONAN" as const, netValueUsd: 120_000 },
 ];
 
+// ONAN is the fixture's "do-nothing" plan and the only one `seedRecommendation`
+// marks as breaching (see test/agentFixtures.ts) -- ranking it first is what
+// makes the recommended plan itself the one in breach, not just a runner-up.
+const ONAN_BREACHES_TOP = [
+  { stage: "ONAN" as const, netValueUsd: 300_000 },
+  { stage: "OFAF" as const, netValueUsd: 100_000 },
+];
+
+const NEGATIVE_TOP = [{ stage: "OFAF" as const, netValueUsd: -50_000 }];
+
 const FINAL_SAYS_OFAF = "OBSERVATION\nHot-spot 134.4 °C.\n\nRECOMMENDATION\nEngage OFAF.";
-const FINAL_SAYS_ONAN = "OBSERVATION\nHot-spot 134.4 °C.\n\nRECOMMENDATION\nHold at ONAN.";
+const FINAL_SAYS_HOLD_ONAN =
+  "OBSERVATION\nHot-spot 134.4 °C.\n\nRECOMMENDATION\nHold at ONAN.";
+// Carries a currency figure -- the sign-flipped magnitude from the RESEARCH-LOG
+// §9 incident -- so a fabrication guard can check the figure, not just the stage.
+const FINAL_SAYS_ONAN = "OBSERVATION\nHot-spot 134.4 °C.\n\nRECOMMENDATION\nHold at ONAN, net −$508,680.";
 
 const TABLE_HEADING = "Ranked options — by net value, computed by the twin";
 
@@ -54,9 +69,16 @@ describe("collapsed", () => {
   });
 
   it("takes the headline from tool output even when the prose names another stage", () => {
-    // The fabrication guard. Collapsed there is no table beside the prose, so a
-    // prose-derived figure would be an unchecked claim in the most glanceable
-    // element in the UI.
+    // The fabrication guard, aimed at the RESEARCH-LOG.md §9 failure class: a
+    // sign-flipped dollar figure, not merely a wrong stage name. FINAL_SAYS_ONAN
+    // states "net −$508,680" -- OFAF's real net value with the sign flipped --
+    // so an implementation that takes the stage from tools but the figure from
+    // prose (falling back to tools only when prose has no figure) would render
+    // "−$508,680" here and pass a stage-only check while still fabricating the
+    // number. Asserting both the tool-derived figure is present and the
+    // prose-derived one is absent catches that case; a prose-reading
+    // implementation fails the second assertion, and a broken one that never
+    // renders a tool figure at all fails the first.
     seedRecommendation({ plans: OFAF_BEST, final: FINAL_SAYS_ONAN });
     renderCard();
     minimize();
@@ -65,6 +87,39 @@ describe("collapsed", () => {
     expect(bar).toHaveTextContent("OFAF");
     expect(bar).not.toHaveTextContent("ONAN");
     expect(bar).toHaveTextContent(/disagrees/i);
+    expect(bar).toHaveTextContent(formatUsd(508_680));
+    expect(bar).not.toHaveTextContent("508,680");
+  });
+
+  it("shows a breach marker when the recommended plan breaches the limit", () => {
+    // Ranking ONAN first makes the *recommended* plan the one in breach, not
+    // just a runner-up -- the case the collapsed bar must not hide.
+    seedRecommendation({ plans: ONAN_BREACHES_TOP, final: FINAL_SAYS_HOLD_ONAN });
+    renderCard();
+    minimize();
+
+    expect(screen.getByRole("button", { name: /expand recommendation/i })).toHaveTextContent(
+      /breach/i,
+    );
+  });
+
+  it("shows no breach marker when the recommended plan is within limits", () => {
+    seedRecommendation({ plans: OFAF_BEST, final: FINAL_SAYS_OFAF });
+    renderCard();
+    minimize();
+
+    expect(screen.getByRole("button", { name: /expand recommendation/i })).not.toHaveTextContent(
+      /breach/i,
+    );
+  });
+
+  it("colours a negative net value the same way the ranked table does", () => {
+    seedRecommendation({ plans: NEGATIVE_TOP, final: FINAL_SAYS_OFAF });
+    renderCard();
+    minimize();
+
+    const figure = screen.getByText(`OFAF · ${formatUsd(-50_000)}`);
+    expect(figure).toHaveClass("text-forge-red");
   });
 
   it("shows no figure at all when no plan could be extracted", () => {
@@ -163,10 +218,24 @@ describe("keyboard and assistive technology", () => {
 
   it("does not steal focus when a card first appears", () => {
     // Focus belongs to whatever the operator was doing; an arriving panel must
-    // not grab it.
-    seedRecommendation({ plans: OFAF_BEST, final: FINAL_SAYS_OFAF });
-    renderCard();
+    // not grab it. jsdom's default active element is already document.body, so
+    // asserting that after a bare render passes trivially -- nothing had a
+    // chance to steal anything. Focusing a real sibling element first, then
+    // seeding the recommendation, gives the assertion something to lose.
+    render(
+      <>
+        <button type="button">Elsewhere</button>
+        <RecommendationCard send={vi.fn()} />
+      </>,
+    );
+    const elsewhere = screen.getByRole("button", { name: "Elsewhere" });
+    elsewhere.focus();
+    expect(elsewhere).toHaveFocus();
 
-    expect(document.body).toHaveFocus();
+    act(() => {
+      seedRecommendation({ plans: OFAF_BEST, final: FINAL_SAYS_OFAF });
+    });
+
+    expect(elsewhere).toHaveFocus();
   });
 });
