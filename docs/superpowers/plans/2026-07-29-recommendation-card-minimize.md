@@ -332,7 +332,7 @@ describe("collapsed", () => {
     minimize();
 
     expect(screen.queryByText(TABLE_HEADING)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Expand recommendation/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /expand recommendation/i })).toBeInTheDocument();
   });
 
   it("keeps the conclusion: recommended stage and its net value", () => {
@@ -340,7 +340,7 @@ describe("collapsed", () => {
     renderCard();
     minimize();
 
-    const bar = screen.getByRole("button", { name: /Expand recommendation/ });
+    const bar = screen.getByRole("button", { name: /expand recommendation/i });
     expect(bar).toHaveTextContent("OFAF");
     expect(bar).toHaveTextContent("$509k");
   });
@@ -353,7 +353,7 @@ describe("collapsed", () => {
     renderCard();
     minimize();
 
-    const bar = screen.getByRole("button", { name: /Expand recommendation/ });
+    const bar = screen.getByRole("button", { name: /expand recommendation/i });
     expect(bar).toHaveTextContent("OFAF");
     expect(bar).not.toHaveTextContent("ONAN");
     expect(bar).toHaveTextContent(/disagrees/i);
@@ -364,7 +364,7 @@ describe("collapsed", () => {
     renderCard();
     minimize();
 
-    const bar = screen.getByRole("button", { name: /Expand recommendation/ });
+    const bar = screen.getByRole("button", { name: /expand recommendation/i });
     expect(bar).toHaveTextContent(/ready/i);
     expect(bar).not.toHaveTextContent("$");
   });
@@ -374,7 +374,7 @@ describe("collapsed", () => {
     renderCard();
     minimize();
 
-    expect(screen.getByRole("button", { name: /Expand recommendation/ })).toHaveTextContent(
+    expect(screen.getByRole("button", { name: /expand recommendation/i })).toHaveTextContent(
       /local model/i,
     );
   });
@@ -383,7 +383,7 @@ describe("collapsed", () => {
     seedRecommendation({ plans: OFAF_BEST, final: FINAL_SAYS_OFAF });
     renderCard();
     minimize();
-    fireEvent.click(screen.getByRole("button", { name: /Expand recommendation/ }));
+    fireEvent.click(screen.getByRole("button", { name: /expand recommendation/i }));
 
     expect(screen.getByText(TABLE_HEADING)).toBeInTheDocument();
   });
@@ -415,7 +415,7 @@ describe("close", () => {
     fireEvent.click(screen.getByRole("button", { name: "Dismiss recommendation" }));
 
     expect(screen.queryByText(TABLE_HEADING)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Expand recommendation/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /expand recommendation/i })).not.toBeInTheDocument();
   });
 });
 ```
@@ -465,8 +465,12 @@ function CollapsedSummary({ best, disagrees, local, bodyId, onExpand }: Collapse
       className="transition-brand pointer-events-auto flex w-full items-baseline justify-between gap-3 self-end rounded border border-border border-l-2 border-l-forge-red bg-surface-1/95 px-4 py-2 text-left backdrop-blur-sm hover:border-text-tertiary"
     >
       <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        {/* The action is announced but not shown: an aria-label here would
+            override the content and hide the conclusion below from screen
+            readers, which is the one thing the collapsed row exists to keep. */}
+        <span className="sr-only">Expand </span>
         <span className="font-display text-[20px] tracking-[0.03em] text-text-primary">
-          Expand recommendation
+          Recommendation
         </span>
         {best ? (
           <span className="font-mono text-[14px] font-medium tabular-nums text-text-primary">
@@ -630,7 +634,7 @@ describe("keyboard and assistive technology", () => {
     expect(document.getElementById(bodyId ?? "")).toBeInTheDocument();
 
     minimize();
-    const bar = screen.getByRole("button", { name: /Expand recommendation/ });
+    const bar = screen.getByRole("button", { name: /expand recommendation/i });
     expect(bar).toHaveAttribute("aria-expanded", "false");
     expect(bar).toHaveAttribute("aria-controls", bodyId);
   });
@@ -640,14 +644,14 @@ describe("keyboard and assistive technology", () => {
     renderCard();
     minimize();
 
-    expect(screen.getByRole("button", { name: /Expand recommendation/ })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /expand recommendation/i })).toHaveFocus();
   });
 
   it("moves focus into the card on expand", () => {
     seedRecommendation({ plans: OFAF_BEST, final: FINAL_SAYS_OFAF });
     renderCard();
     minimize();
-    fireEvent.click(screen.getByRole("button", { name: /Expand recommendation/ }));
+    fireEvent.click(screen.getByRole("button", { name: /expand recommendation/i }));
 
     expect(screen.getByRole("heading", { name: "Recommendation" })).toHaveFocus();
   });
@@ -882,7 +886,7 @@ test("collapsing the recommendation gives the twin back to the camera", async ({
   expect(await tagAt(point)).not.toBe("CANVAS");
 
   await page.getByRole("button", { name: "Minimize recommendation" }).click();
-  await expect(page.getByRole("button", { name: /Expand recommendation/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /expand recommendation/i })).toBeVisible();
 
   // Collapsed, the same point reaches the twin.
   expect(await tagAt(point)).toBe("CANVAS");
@@ -895,7 +899,7 @@ test("the collapsed bar still carries the recommended plan", async ({ page }) =>
 
   await page.getByRole("button", { name: "Minimize recommendation" }).click();
 
-  const bar = page.getByRole("button", { name: /Expand recommendation/ });
+  const bar = page.getByRole("button", { name: /expand recommendation/i });
   await expect(bar).toContainText("OFAF");
   await expect(bar).toContainText("$509k");
 });

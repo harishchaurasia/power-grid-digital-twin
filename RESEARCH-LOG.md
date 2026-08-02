@@ -607,7 +607,66 @@ using unreal engine"). Not yet locked.
    the e2e run. That is the condition under test, not a failure, but it buries the results — worth
    a proxy `configure` handler before this is in CI.
 
-11. **Blocked / still pending.**
+12. **Recommendation card minimize (2026-07-29).** `Close` was the only way to clear the card, and
+   it discards the analysis — so seeing the twin meant losing the reasoning and re-running the
+   agent. Minimize collapses it to a one-line row that keeps its conclusion; `Close` is unchanged.
+
+   **The collapsed headline is read from `simulate_forward` tool output, never from the prose.**
+   Expanded, the ranked table sits beside the narrative and contradicts it where they differ.
+   Collapsed there is no table, so a prose-derived figure would be an unchecked claim in the most
+   glanceable element in the UI — and §9 records the agent reporting ONAN's net value as
+   −$508,679.65 when its own tool returned +$508,679.65. Where the prose names a different stage
+   than the tools rank first, the collapsed bar says so; with no extractable plan it shows no
+   number at all rather than inventing one. The `disagreesWithTools` predicate moved out of
+   `RankedOptions` into `lib/agentPlans.ts` so the two views cannot reach different verdicts.
+
+   Spec: `docs/superpowers/specs/2026-07-29-recommendation-card-minimize-design.md`.
+   13 component tests in `RecommendationCard.test.tsx`, 55 vitest tests total across 6 files,
+   and 10 Playwright specs total (2 new in `e2e/recommendation.spec.ts` plus 8 pre-existing); the
+   e2e hit-test found a Suspense-wrapper artifact — `elementFromPoint` returned the lazy-load
+   boundary `<div>` before the 3D scene canvas mounted, so the "expanded → not CANVAS" assertion
+   passed vacuously whether or not a canvas ever rendered. Flaky 3 of 5 runs until fixed by
+   waiting for the canvas before hit-testing.
+
+   **Two defects the per-task reviews structurally could not see, caught by a whole-branch review.**
+   First: the collapsed bar hid whether the recommended plan was *admissible*. `extractPlans` ranks
+   on `net_value_usd` alone and ignores `breaches_120c`, so a high-value peak can put a breaching
+   plan on top — and the bar showed `OFAF · $509k` with no limit state and no colour on a negative
+   value, while the expanded table shows both. That inverts the domain rule that hard limits are
+   constraints, not costs, at the one surface presenting a conclusion without its context. The bar
+   now carries a `breach` marker and red negative values, reusing the table's wording and colour.
+
+   Second, and worth recording because it nearly shipped: **the fabrication guard could not catch
+   the bug it was named after.** It asserted stage provenance, and neither prose fixture contained a
+   currency amount, so an implementation reading the *figure* from prose passed every test. The
+   first attempt to fix it also failed, less obviously — `toHaveTextContent` matches substrings, and
+   `formatUsd(-508_680)` is `"−$509k"`, which *contains* `"$509k"`. A bar rendering the sign-flipped
+   figure still satisfied the assertion. That is precisely the §9 failure mode. Closed by asserting
+   exact text via `getByText`, and verified the only way that counts: the component was temporarily
+   patched to read the figure out of the prose, the guard was watched failing
+   (`Unable to find an element with the text: OFAF · $509k` against a rendered `OFAF · −$509k`),
+   and the patch reverted. A guard that cannot fail is decoration.
+
+   **Follow-ups, none blocking, all deferred deliberately:**
+   - `e2e/backend.ts` silently requires port 8000 to be free — `startBackend()` no-ops when
+     something already answers, so `fallback.spec.ts` fails with a confusing `"Live"` vs
+     `/recorded/i` mismatch instead of naming the port collision. This cost two spurious failures
+     during the build. It should fail loudly on the precondition.
+   - `aria-controls` on the collapsed bar points at an id that is unmounted in that state. No WCAG
+     failure and no screen-reader impact (`aria-expanded` alone is the valid disclosure pattern),
+     but the fix is to omit the attribute when collapsed — and the current a11y test ratifies the
+     dangle by only checking the expanded case.
+   - The `simulate_forward` wire shape is hand-fixtured in `test/agentFixtures.ts` and
+     `e2e/recommendation.spec.ts` with nothing tying either to `backend/agent/tools.py`. Renaming
+     `net_value_usd` backend-side would blank the collapsed bar and the table with every test still
+     green — the safe failure direction, but silent.
+   - `AgentProvider` is declared in `components/RecommendationCardViews.tsx` rather than exported
+     from `lib/store.ts`, so the container imports its own state type out of a presentational
+     module. Inverted dependency direction.
+   - The e2e card locator depends on exactly three DOM levels (`h2 > div > header > section`); a
+     wrapper added to the header would silently move the measured rectangle.
+
+13. **Blocked / still pending.**
    - **Frontier model for the agent.** The agent layer is built and provider-agnostic (item 9);
      what is missing is a hosted key. Local `qwen2.5:7b` fabricated numbers in two distinct ways,
      which breaks the one discipline that *is* the differentiator. Development only.

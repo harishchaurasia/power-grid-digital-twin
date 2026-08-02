@@ -1,4 +1,9 @@
-import { formatUsd, interventionFor, type PlanOption } from "@/lib/agentPlans";
+import {
+  disagreesWithTools,
+  formatUsd,
+  interventionFor,
+  type PlanOption,
+} from "@/lib/agentPlans";
 import type { ClientMessage, CoolingStage } from "@/lib/types";
 
 import { Caption } from "./Panel";
@@ -26,7 +31,7 @@ export function RankedOptions({ plans, stated, activeStage, canApply, send }: Ra
   if (plans.length === 0) return null;
 
   const best = plans[0];
-  const disagrees = stated !== null && best !== undefined && stated !== best.coolingStage;
+  const disagrees = disagreesWithTools(stated, plans);
 
   return (
     <div>
