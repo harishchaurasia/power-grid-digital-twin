@@ -12,7 +12,18 @@ const FINAL = "OBSERVATION\nHot-spot 134.4 °C.\n\nRECOMMENDATION\nEngage OFAF."
 
 /** Replays the agent messages the WebSocket would send, via the DEV store handle. */
 async function seedRecommendation(page: import("@playwright/test").Page): Promise<void> {
-  await page.waitForFunction(() => "__arkaforgeStore" in window);
+  // `__arkaforgeStore` is attached only in a Vite dev build (`import.meta.env.DEV`
+  // in app/main.tsx); a production/preview build never defines it. Without this
+  // short timeout + explicit message, that case hangs for the suite's full
+  // 20s expect timeout and reports a generic "timeout waiting for function",
+  // which does not point at the real cause.
+  await page.waitForFunction(() => "__arkaforgeStore" in window, undefined, { timeout: 5_000 }).catch(() => {
+    throw new Error(
+      "window.__arkaforgeStore was never defined. This spec seeds the agent " +
+        "recommendation through that DEV-only handle (app/main.tsx) and cannot " +
+        "run against a production/preview build -- run it against `npm run dev`.",
+    );
+  });
   await page.evaluate((final) => {
     const store = (
       window as unknown as {
