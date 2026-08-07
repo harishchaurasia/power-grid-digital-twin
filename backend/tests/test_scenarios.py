@@ -55,6 +55,13 @@ def test_cooling_scenario_caps_the_stage_rather_than_fudging_capacity() -> None:
 
 
 def test_severity_ranges_are_ordered() -> None:
+    """Severity ranges must be ordered (low ≤ high).
+
+    For profiles with continuous magnitudes (ramp, step), variety between
+    repeats comes from sampling the range. For binary events (cooling cap),
+    severity is inert and the range is fixed at (1.0, 1.0) -- variety comes
+    from Poisson arrival timing, not severity scaling.
+    """
     for spec in library_entries():
         low, high = spec.severity_range
-        assert low < high
+        assert low <= high

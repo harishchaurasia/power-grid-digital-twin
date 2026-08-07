@@ -133,7 +133,10 @@ SCENARIO_LIBRARY: dict[ScenarioId, ScenarioSpec] = {
             "maintenance event, not an outage, so it is an order of magnitude "
             "more common than the CIGRE major-failure rate. Order of magnitude only."
         ),
-        severity_range=(0.95, 1.05),
+        # Severity is inert for a binary stage-cap event (a bank either trips or it
+        # does not). Variety between repeats comes from Poisson arrival timing, not
+        # severity. Kept at (1.0, 1.0) deliberately.
+        severity_range=(1.0, 1.0),
         major_failure_rate_per_year=COOLING_MAJOR_FAILURE_RATE_PER_YEAR,
         major_failure_rate_source=COOLING_MAJOR_FAILURE_SOURCE,
     ),
