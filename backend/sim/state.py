@@ -26,6 +26,16 @@ class AmbientConditions(BaseModel):
     solar_wm2: float = 900.0
 
 
+class ActiveScenario(BaseModel):
+    """Which library scenario is running, for display and for the agent's context."""
+
+    id: str
+    label: str
+    mechanism: str
+    #: Present only in a random shift; None when triggered deliberately.
+    seed: int | None = None
+
+
 class TransformerSnapshot(BaseModel):
     """Derived transformer state, all values traceable to the C57.91 model."""
 
@@ -35,6 +45,9 @@ class TransformerSnapshot(BaseModel):
     hot_spot_c: float
     aging_factor_faa: float
     cooling_stage: CoolingStage
+    #: What the operator asked for. Differs from `cooling_stage` when a fan-bank
+    #: failure has capped what the plant can deliver.
+    requested_cooling_stage: CoolingStage
     cumulative_loss_of_life_hours: float
     status: AssetStatus
     model_standard: str = "IEEE C57.91"
@@ -48,6 +61,7 @@ class TwinSnapshot(BaseModel):
     twinning_rate_hz: float
     ambient: AmbientConditions
     transformer: TransformerSnapshot
+    scenario: ActiveScenario | None = None
     # Populated in Phase 2 / Phase 3; None until their physics models exist.
     bess: None = None
     line: None = None

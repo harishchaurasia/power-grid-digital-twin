@@ -110,9 +110,9 @@ SCENARIO_LIBRARY: dict[ScenarioId, ScenarioSpec] = {
             "peak raises loading. Hot-spot climbs super-linearly."
         ),
         profile=RampProfile(
-            peak_load_mva=198.0,
+            peak_load_mva=198.0,  # ~1.32 x ONAN rating -> forces the decision
             load_ramp_hours=3.0,
-            peak_ambient_c=41.0,
+            peak_ambient_c=41.0,  # heat wave: shrinks cooling headroom
             ambient_ramp_hours=4.0,
         ),
         rate_per_year=HEATWAVE_RATE_PER_YEAR,
