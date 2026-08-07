@@ -65,6 +65,19 @@ COOLING_STAGE_PARAMS: dict[CoolingStage, CoolingStageParams] = {
     CoolingStage.OFAF: CoolingStageParams(rated_mva=250.0, oil_exponent_n=1.0, top_oil_time_constant_h=1.25),
 }
 
+#: Increasing capacity order. Explicit rather than relying on enum declaration
+#: order, because the cap comparison is physical, not incidental.
+COOLING_STAGE_ORDER: tuple[CoolingStage, ...] = (
+    CoolingStage.ONAN,
+    CoolingStage.ONAF,
+    CoolingStage.OFAF,
+)
+
+
+def stage_rank(stage: CoolingStage) -> int:
+    """Position in increasing cooling capacity."""
+    return COOLING_STAGE_ORDER.index(stage)
+
 
 def ultimate_top_oil_rise_c(load_ratio_k: float, oil_exponent_n: float) -> float:
     """Ultimate (steady-state) top-oil rise over ambient at load ratio K.
@@ -124,6 +137,10 @@ class TransformerThermalModel:
 
     ambient_c: float = 30.0
     cooling_stage: CoolingStage = CoolingStage.ONAN
+    #: Highest stage the plant can actually deliver. A tripped fan bank lowers
+    #: this; the operator's request is kept separate so the console can show
+    #: that what was asked for is not what physics received.
+    max_available_stage: CoolingStage = CoolingStage.OFAF
     _top_oil_c: float = field(init=False)
     _hotspot_rise_c: float = field(init=False)
     _cumulative_lol_hours: float = field(default=0.0, init=False)
@@ -133,13 +150,21 @@ class TransformerThermalModel:
         self._top_oil_c = self.ambient_c
         self._hotspot_rise_c = 0.0
 
+    @property
+    def effective_cooling_stage(self) -> CoolingStage:
+        """The stage physics actually gets: the request, capped by availability."""
+        if stage_rank(self.cooling_stage) <= stage_rank(self.max_available_stage):
+            return self.cooling_stage
+        return self.max_available_stage
+
     def load_ratio(self, load_mva: float, cooling_stage: CoolingStage | None = None) -> float:
-        stage = cooling_stage or self.cooling_stage
+        stage = cooling_stage or self.effective_cooling_stage
         return load_mva / COOLING_STAGE_PARAMS[stage].rated_mva
 
     def clone(self) -> TransformerThermalModel:
         """Copy the full thermal state so a what-if run cannot disturb the live twin."""
         other = TransformerThermalModel(ambient_c=self.ambient_c, cooling_stage=self.cooling_stage)
+        other.max_available_stage = self.max_available_stage
         other._top_oil_c = self._top_oil_c
         other._hotspot_rise_c = self._hotspot_rise_c
         other._cumulative_lol_hours = self._cumulative_lol_hours
@@ -156,7 +181,7 @@ class TransformerThermalModel:
         if cooling_stage is not None:
             self.cooling_stage = cooling_stage
         self.ambient_c = ambient_c
-        params = COOLING_STAGE_PARAMS[self.cooling_stage]
+        params = COOLING_STAGE_PARAMS[self.effective_cooling_stage]
         k = load_mva / params.rated_mva
 
         top_oil_ult = self.ambient_c + ultimate_top_oil_rise_c(k, params.oil_exponent_n)
@@ -176,7 +201,7 @@ class TransformerThermalModel:
             hotspot_c=hotspot_c,
             load_ratio_k=k,
             aging_factor_faa=faa,
-            cooling_stage=self.cooling_stage,
+            cooling_stage=self.effective_cooling_stage,
             cumulative_loss_of_life_hours=self._cumulative_lol_hours,
         )
 
@@ -186,14 +211,14 @@ class TransformerThermalModel:
         Distinct from `steady_state`, which is the analytic equilibrium: this is
         where the model actually is right now, for reads that must not mutate.
         """
-        params = COOLING_STAGE_PARAMS[self.cooling_stage]
+        params = COOLING_STAGE_PARAMS[self.effective_cooling_stage]
         hotspot_c = self._top_oil_c + self._hotspot_rise_c
         return TransformerState(
             top_oil_c=self._top_oil_c,
             hotspot_c=hotspot_c,
             load_ratio_k=load_mva / params.rated_mva,
             aging_factor_faa=aging_acceleration_factor(hotspot_c),
-            cooling_stage=self.cooling_stage,
+            cooling_stage=self.effective_cooling_stage,
             cumulative_loss_of_life_hours=self._cumulative_lol_hours,
         )
 
@@ -203,9 +228,14 @@ class TransformerThermalModel:
         """Analytic thermal equilibrium (t -> infinity) at fixed load/ambient.
 
         Used for validation against C57.91 worked values and as a fast headroom
-        probe; bypasses time-constant integration.
+        probe; bypasses time-constant integration. The no-override fallback
+        reads the effective (capped) stage -- same physics-read rule as
+        `load_ratio` and `step` -- so a headroom probe under a failed fan bank
+        reports what the plant can actually reach, not a hypothetical stage it
+        cannot deliver. An explicit `cooling_stage` argument is a deliberate
+        what-if query and is used as given, uncapped.
         """
-        stage = cooling_stage or self.cooling_stage
+        stage = cooling_stage or self.effective_cooling_stage
         params = COOLING_STAGE_PARAMS[stage]
         k = load_mva / params.rated_mva
         top_oil_c = ambient_c + ultimate_top_oil_rise_c(k, params.oil_exponent_n)

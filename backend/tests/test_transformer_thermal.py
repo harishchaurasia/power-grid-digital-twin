@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import math
 
+import pytest
+
 from sim.transformer import (
     HOTSPOT_REFERENCE_C,
     CoolingStage,
+    TransformerState,
     TransformerThermalModel,
     aging_acceleration_factor,
     ultimate_hotspot_rise_over_top_oil_c,
@@ -120,3 +123,49 @@ def test_loss_of_life_accumulates_faster_under_overload() -> None:
     n_state = nominal.step(0.01, RATED_MVA_ONAN, RATED_AMBIENT_C)
     o_state = overload.step(0.01, 1.3 * RATED_MVA_ONAN, RATED_AMBIENT_C)
     assert o_state.cumulative_loss_of_life_hours > n_state.cumulative_loss_of_life_hours
+
+
+def test_requested_stage_is_capped_by_available_cooling() -> None:
+    """A tripped fan bank must remove the lever, not be silently ignored."""
+    model = TransformerThermalModel(ambient_c=30.0, cooling_stage=CoolingStage.ONAN)
+    model.max_available_stage = CoolingStage.ONAF
+    model.cooling_stage = CoolingStage.OFAF
+
+    assert model.cooling_stage is CoolingStage.OFAF  # what the operator asked for
+    assert model.effective_cooling_stage is CoolingStage.ONAF  # what physics gets
+
+
+def test_capped_stage_uses_the_capped_stage_rating() -> None:
+    """K must be computed against attainable capacity, not the requested one."""
+    capped = TransformerThermalModel(ambient_c=30.0, cooling_stage=CoolingStage.OFAF)
+    capped.max_available_stage = CoolingStage.ONAF
+    honest = TransformerThermalModel(ambient_c=30.0, cooling_stage=CoolingStage.ONAF)
+
+    assert capped.load_ratio(200.0) == pytest.approx(honest.load_ratio(200.0))
+    assert capped.load_ratio(200.0) == pytest.approx(200.0 / 200.0)
+
+
+def test_cap_makes_the_transformer_run_hotter_for_the_same_load() -> None:
+    """The whole point of the scenario: the usual lever no longer helps."""
+    free = TransformerThermalModel(ambient_c=40.0, cooling_stage=CoolingStage.OFAF)
+    capped = TransformerThermalModel(ambient_c=40.0, cooling_stage=CoolingStage.OFAF)
+    capped.max_available_stage = CoolingStage.ONAN
+
+    # Pre-bind (matches test_integration_converges_to_steady_state's idiom) so
+    # strict pyright does not flag the loop-scoped names as possibly unbound.
+    free_state: TransformerState | None = None
+    capped_state: TransformerState | None = None
+    for _ in range(400):
+        free_state = free.step(dt_hours=0.05, load_mva=190.0, ambient_c=40.0)
+        capped_state = capped.step(dt_hours=0.05, load_mva=190.0, ambient_c=40.0)
+
+    assert free_state is not None
+    assert capped_state is not None
+    assert capped_state.hotspot_c > free_state.hotspot_c + 20.0
+
+
+def test_uncapped_model_is_unchanged() -> None:
+    """Default behaviour must be byte-identical to before the cap existed."""
+    model = TransformerThermalModel(ambient_c=30.0, cooling_stage=CoolingStage.ONAF)
+    assert model.max_available_stage is CoolingStage.OFAF
+    assert model.effective_cooling_stage is CoolingStage.ONAF
