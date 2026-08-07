@@ -118,11 +118,15 @@ type ServerMessage =
 
 ```typescript
 type ClientMessage =
-  | { type: "trigger_scenario"; scenario: "heatwave_load_spike" | "reset" }
+  | { type: "trigger_scenario"; scenario: ScenarioId | "reset" }
+  | { type: "start_random_shift"; seed?: number }
   | { type: "agent_invoke" }
   | { type: "apply_intervention"; intervention: InterventionId }
   | { type: "select_asset"; asset: AssetId };
 ```
+
+`ScenarioId = "heatwave_load_spike" | "cooling_bank_failure" | "feeder_pickup_step"`, served with
+its real-world rates and sources from `GET /api/scenarios`.
 
 ### Backend ⇄ Unreal
 
