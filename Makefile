@@ -3,7 +3,20 @@ UV := uv run --python $(PY)
 BACKEND := cd backend &&
 CONSOLE := cd console &&
 
-.PHONY: dev backend console sim typecheck lint test test-e2e install build record
+.PHONY: demo demo-restart dev backend console sim typecheck lint test test-e2e install build record
+
+# One command to show this to someone. Reclaims the ports from a previous demo,
+# starts Ollama if the agent resolves to a local model (and pre-loads it, so the
+# first analysis is not the slow one), then backend + console, waiting until each
+# actually answers. Ctrl-C stops it.
+demo:
+	@./scripts/demo.sh
+
+# Same, but takes ports 8000/5173 from whatever holds them -- including a process
+# this script cannot identify as ours. For when a stale session must not stand
+# between you and a live demo.
+demo-restart:
+	@./scripts/demo.sh --restart
 
 install:
 	$(BACKEND) uv sync --python $(PY) --extra dev --extra api --extra sim --extra agent
