@@ -56,13 +56,16 @@ export function TwinScene() {
       <directionalLight position={[-30, 20, -26]} intensity={0.85} color="#9fb0c8" />
       <directionalLight position={[-10, 12, 30]} intensity={0.5} color="#cdd6e4" />
 
-      <Suspense fallback={<TransformerModel visual={visual} />}>
-        {heroAvailable === true ? (
+      {/* The built geometry stands in only when the mesh is confirmed missing.
+          While the probe or the download is in flight nothing renders: showing
+          the stand-in there swaps one transformer for a different one a beat
+          later, which reads as a glitch rather than as loading. */}
+      {heroAvailable === true && (
+        <Suspense fallback={null}>
           <HeroTransformer url={HERO_MODEL_URL} visual={visual} />
-        ) : (
-          <TransformerModel visual={visual} />
-        )}
-      </Suspense>
+        </Suspense>
+      )}
+      {heroAvailable === false && <TransformerModel visual={visual} />}
       <SubstationYard />
 
       {/* Graded yard surface. */}
