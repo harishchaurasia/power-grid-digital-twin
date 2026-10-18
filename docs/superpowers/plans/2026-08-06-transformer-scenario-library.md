@@ -852,6 +852,7 @@ would not be.
 
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass
 
@@ -863,7 +864,9 @@ HOURS_PER_YEAR: float = 8760.0
 SHIFT_SIM_HOURS: float = 12.0
 #: What one shift stands for in operating time. Two months, so a ~1.5/yr event
 #: appears occasionally and a 0.05/yr event stays genuinely rare.
-SHIFT_REPRESENTS_HOURS: float = HOURS_PER_YEAR / 6.0
+SHIFT_REPRESENTS_MONTHS: float = 2.0
+MONTHS_PER_YEAR: float = 12.0
+SHIFT_REPRESENTS_HOURS: float = HOURS_PER_YEAR * SHIFT_REPRESENTS_MONTHS / MONTHS_PER_YEAR
 
 
 @dataclass(frozen=True)
@@ -882,7 +885,7 @@ def _expected_count(spec: ScenarioSpec) -> float:
 
 def _poisson(rng: random.Random, mean: float) -> int:
     """Knuth's product method. Fine here: means are far below 1."""
-    limit = pow(2.718281828459045, -mean)
+    limit = math.exp(-mean)
     count, product = 0, rng.random()
     while product > limit:
         count += 1

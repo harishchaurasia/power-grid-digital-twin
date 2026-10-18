@@ -10,6 +10,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field
 
+from sim.scenarios import ScenarioId
 from sim.state import AssetId, AssetStatus, TwinSnapshot
 from sim.transformer import CoolingStage
 
@@ -107,7 +108,15 @@ ServerMessage = Annotated[
 # --- Console -> server -----------------------------------------------------
 class TriggerScenarioMessage(BaseModel):
     type: Literal["trigger_scenario"]
-    scenario: Literal["heatwave_load_spike", "reset"]
+    scenario: ScenarioId | Literal["reset"]
+
+
+class StartRandomShiftMessage(BaseModel):
+    """Run a shift whose events arrive from the library's real-world rates."""
+
+    type: Literal["start_random_shift"]
+    #: Omitted means "pick one and tell me", so the run stays reproducible either way.
+    seed: int | None = None
 
 
 class AgentInvokeMessage(BaseModel):
@@ -127,6 +136,7 @@ class SelectAssetMessage(BaseModel):
 ClientMessage = Annotated[
     Union[
         TriggerScenarioMessage,
+        StartRandomShiftMessage,
         AgentInvokeMessage,
         ApplyInterventionMessage,
         SelectAssetMessage,

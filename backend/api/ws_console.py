@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import random
 import time
 
 import structlog
@@ -31,12 +32,15 @@ from api.schemas import (
     ToolResultMessage,
     intervention_to_cooling_stage,
 )
+from sim.arrivals import Arrival, plan_shift
 from sim.scenario import DEFAULT_TWINNING_RATE_HZ, Simulation
-from sim.state import AssetStatus
+from sim.state import AssetStatus, TwinSnapshot
 
 log = structlog.get_logger(__name__)
 
 SIM_HOURS_PER_TICK: float = 0.02  # sim-time acceleration: ~6 sim-hours in 30 wall-seconds
+#: Upper bound for a server-picked seed when the client omits one (brief step 3).
+RANDOM_SEED_UPPER_BOUND: int = 10_000
 _CLIENT_ADAPTER: TypeAdapter[ClientMessage] = TypeAdapter(ClientMessage)
 
 router = APIRouter()
@@ -52,6 +56,13 @@ class SimulationManager:
         self._prev_transformer_status: AssetStatus | None = None
         self._agent_running = False
         self._task: asyncio.Task[None] | None = None
+        # Random-shift tracking. Only one shift's arrivals are pending at a time,
+        # matching the one-node, one-active-scenario scope (docs/CLAUDE.md).
+        # `plan_shift` times arrivals relative to the shift's own start, so the
+        # sim clock at the moment the shift began must be remembered too.
+        self._pending_arrivals: list[Arrival] = []
+        self._shift_seed: int | None = None
+        self._shift_start_sim_hours: float | None = None
 
     @property
     def simulation(self) -> Simulation:
@@ -60,6 +71,13 @@ class SimulationManager:
 
     async def start(self) -> None:
         if self._task is None:
+            # A fresh app lifespan is a fresh session: no scenario or shift
+            # carries over from a prior run (docs/CLAUDE.md: "no persistence
+            # beyond session"). Cheap no-op the first time, since __init__
+            # already leaves the twin at baseline.
+            self._sim.reset()
+            self._prev_transformer_status = None
+            self._clear_shift()
             self._task = asyncio.create_task(self._run())
 
     async def stop(self) -> None:
@@ -91,8 +109,23 @@ class SimulationManager:
                     self._sim.reset()
                     self._prev_transformer_status = None
                 else:
-                    self._sim.trigger_scenario()
+                    self._sim.trigger_scenario(scenario_id=msg.scenario)
+                # A manual action takes explicit control: any scenario running
+                # afterwards must not be mis-stamped with a stale shift seed.
+                self._clear_shift()
                 log.info("scenario_intent", scenario=msg.scenario)
+            case "start_random_shift":
+                seed = msg.seed if msg.seed is not None else random.randrange(RANDOM_SEED_UPPER_BOUND)
+                now = self._sim.snapshot()
+                self._pending_arrivals = plan_shift(seed)
+                self._shift_seed = seed
+                self._shift_start_sim_hours = now.sim_time_hours
+                log.info(
+                    "random_shift_started",
+                    seed=seed,
+                    arrivals=len(self._pending_arrivals),
+                    scenario_already_active=now.scenario is not None,
+                )
             case "apply_intervention":
                 stage = intervention_to_cooling_stage(msg.intervention)
                 if stage is not None:
@@ -137,9 +170,58 @@ class SimulationManager:
                 AgentDoneMessage(timestamp=int(time.time() * 1000)).model_dump_json()
             )
 
+    def _clear_shift(self) -> None:
+        self._pending_arrivals = []
+        self._shift_seed = None
+        self._shift_start_sim_hours = None
+
+    def _fire_due_arrivals(self, snap: TwinSnapshot) -> None:
+        """Fire shift arrivals whose scheduled time has passed.
+
+        `arrival.at_sim_hours` is relative to when the shift was started, not
+        the twin's absolute sim clock, so it is offset by
+        `_shift_start_sim_hours` before comparing to `snap.sim_time_hours`.
+
+        `Scenario.trigger` (sim/scenario.py) is a no-op while a scenario is
+        already active, so only one arrival can ever start a scenario; a
+        second arrival landing mid-scenario is dropped, not queued. That is
+        the existing single-scenario behaviour -- logged here explicitly so
+        it is a deliberate, visible outcome rather than a silent one.
+        """
+        if self._shift_start_sim_hours is None:
+            return
+        due = snap.sim_time_hours - self._shift_start_sim_hours
+        scenario_active = snap.scenario is not None
+        while self._pending_arrivals and self._pending_arrivals[0].at_sim_hours <= due:
+            arrival = self._pending_arrivals.pop(0)
+            if scenario_active:
+                log.info(
+                    "shift_arrival_dropped",
+                    scenario=arrival.spec.id,
+                    at_sim_hours=arrival.at_sim_hours,
+                    reason="scenario_already_active",
+                )
+                continue
+            self._sim.trigger_scenario(arrival.spec.id, arrival.severity)
+            scenario_active = True
+            log.info(
+                "shift_arrival_fired",
+                scenario=arrival.spec.id,
+                severity=arrival.severity,
+                at_sim_hours=arrival.at_sim_hours,
+            )
+
     async def _run(self) -> None:
         while True:
             snap = self._sim.tick(SIM_HOURS_PER_TICK)
+            self._fire_due_arrivals(snap)
+            if self._shift_seed is not None and snap.scenario is not None:
+                # Stamp the seed after firing: the frame in which an arrival
+                # fires still carries last tick's (unseeded) scenario field,
+                # the next tick's snapshot reflects it.
+                snap = snap.model_copy(
+                    update={"scenario": snap.scenario.model_copy(update={"seed": self._shift_seed})}
+                )
             now_ms = int(time.time() * 1000)
             messages = [TelemetryMessage(payload=snap, timestamp=now_ms).model_dump_json()]
 

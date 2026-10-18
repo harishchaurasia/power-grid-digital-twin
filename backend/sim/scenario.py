@@ -1,10 +1,9 @@
-"""Scenario driver: heat wave coincident with a data-center load spike.
+"""Scenario driver: applies a library spec to the C57.91 model's inputs.
 
-Couples the precipitating event to the transformer model. Before the event the
-node sits at a comfortable baseline; on trigger, ambient temperature and node
-load both ramp smoothly toward a coincident peak -- the super-linear hot-spot
-climb that makes the transformer the first binding constraint
-(docs/domain-transformer.md, "Coupling to the scenario").
+Baseline until triggered, then the active `ScenarioSpec` (sim/scenarios.py)
+drives load, ambient, and/or cooling capacity toward its setpoints. The
+heat-wave + load-spike arc is one library entry now, not the only one this
+module can apply (docs/domain-transformer.md, "Coupling to the scenario").
 """
 
 from __future__ import annotations
@@ -18,7 +17,9 @@ from sim.projection import (
     HotSpotProjection,
     project_hot_spot,
 )
+from sim.scenarios import SCENARIO_LIBRARY, ScenarioId, ScenarioSpec
 from sim.state import (
+    ActiveScenario,
     AmbientConditions,
     TransformerSnapshot,
     TwinSnapshot,
@@ -26,13 +27,17 @@ from sim.state import (
 )
 from sim.transformer import CoolingStage, TransformerState, TransformerThermalModel
 
-# --- Scenario setpoints (documented here, not in agent/UI code).
+# The node's normal operating point absent any scenario (owned here, not by any one scenario).
 BASELINE_LOAD_MVA: float = 135.0
-PEAK_LOAD_MVA: float = 198.0  # ~1.32 x ONAN rating -> forces the decision
 BASELINE_AMBIENT_C: float = 28.0
-PEAK_AMBIENT_C: float = 41.0  # heat wave: shrinks cooling headroom
-LOAD_RAMP_HOURS: float = 3.0
-AMBIENT_RAMP_HOURS: float = 4.0
+
+# Re-exported from SCENARIO_LIBRARY (single source of truth) rather than
+# duplicated as literals, since other modules still import these names here.
+_heatwave_profile = SCENARIO_LIBRARY["heatwave_load_spike"].profile
+if _heatwave_profile.kind != "ramp":
+    raise AssertionError("heatwave_load_spike must have a ramp profile")
+PEAK_LOAD_MVA: float = _heatwave_profile.peak_load_mva
+PEAK_AMBIENT_C: float = _heatwave_profile.peak_ambient_c
 
 DEFAULT_TWINNING_RATE_HZ: float = 10.0
 
@@ -60,43 +65,84 @@ class PlanResult:
 
 
 class Scenario:
-    """Produces (load, ambient) setpoints as a function of elapsed sim time."""
+    """Produces (load, ambient, cooling cap) as a function of elapsed sim time.
+
+    Spec and severity come from the caller -- manually here, or from a random
+    shift in `sim/arrivals.py` -- so this class stays free of randomness.
+    """
 
     def __init__(self) -> None:
-        self._triggered = False
+        self._spec: ScenarioSpec | None = None
+        self._severity: float = 1.0
         self._trigger_time_hours: float | None = None
 
     @property
     def triggered(self) -> bool:
-        return self._triggered
+        return self._spec is not None
 
-    def trigger(self, at_sim_hours: float) -> None:
-        if not self._triggered:
-            self._triggered = True
+    @property
+    def active_spec(self) -> ScenarioSpec | None:
+        return self._spec
+
+    @property
+    def cooling_cap(self) -> CoolingStage | None:
+        """The cap this scenario imposes, or None if it does not touch cooling."""
+        if self._spec is None or self._spec.profile.kind != "cooling_cap":
+            return None
+        return self._spec.profile.max_available_stage
+
+    def trigger(
+        self,
+        at_sim_hours: float,
+        spec: ScenarioSpec,
+        severity: float = 1.0,
+    ) -> None:
+        if self._spec is None:
+            self._spec = spec
+            self._severity = severity
             self._trigger_time_hours = at_sim_hours
 
     def reset(self) -> None:
-        self._triggered = False
+        self._spec = None
+        self._severity = 1.0
         self._trigger_time_hours = None
 
     def setpoint(self, sim_hours: float) -> ScenarioSetpoint:
-        if not self._triggered or self._trigger_time_hours is None:
-            return ScenarioSetpoint(load_mva=BASELINE_LOAD_MVA, ambient_c=BASELINE_AMBIENT_C)
+        baseline = ScenarioSetpoint(load_mva=BASELINE_LOAD_MVA, ambient_c=BASELINE_AMBIENT_C)
+        if self._spec is None or self._trigger_time_hours is None:
+            return baseline
+
         elapsed = sim_hours - self._trigger_time_hours
-        load = BASELINE_LOAD_MVA + (PEAK_LOAD_MVA - BASELINE_LOAD_MVA) * _smoothstep(
-            elapsed / LOAD_RAMP_HOURS
-        )
-        ambient = BASELINE_AMBIENT_C + (PEAK_AMBIENT_C - BASELINE_AMBIENT_C) * _smoothstep(
-            elapsed / AMBIENT_RAMP_HOURS
-        )
-        return ScenarioSetpoint(load_mva=load, ambient_c=ambient)
+        profile = self._spec.profile
+
+        if profile.kind == "ramp":
+            load_delta = (profile.peak_load_mva - BASELINE_LOAD_MVA) * self._severity
+            ambient_delta = (profile.peak_ambient_c - BASELINE_AMBIENT_C) * self._severity
+            return ScenarioSetpoint(
+                load_mva=BASELINE_LOAD_MVA
+                + load_delta * _smoothstep(elapsed / profile.load_ramp_hours),
+                ambient_c=BASELINE_AMBIENT_C
+                + ambient_delta * _smoothstep(elapsed / profile.ambient_ramp_hours),
+            )
+
+        if profile.kind == "step":
+            # Ramped over minutes, not a true discontinuity: a breaker op is
+            # fast against tau_TO, but the lag the test asserts is physics, not
+            # smoothing of the input.
+            fraction = _smoothstep(elapsed / profile.step_duration_hours)
+            return ScenarioSetpoint(
+                load_mva=BASELINE_LOAD_MVA + profile.load_step_mva * self._severity * fraction,
+                ambient_c=BASELINE_AMBIENT_C,
+            )
+
+        # cooling_cap: the stress is lost capacity, so the inputs stay at baseline.
+        return baseline
 
 
 class Simulation:
     """Owns the authoritative transformer twin and advances it under the scenario.
 
-    Sim time is decoupled from wall-clock so a multi-hour event can be demoed in
-    minutes; the caller supplies the sim-hours advanced per tick.
+    Sim time is decoupled from wall-clock: a multi-hour event demos in minutes.
     """
 
     def __init__(
@@ -132,8 +178,18 @@ class Simulation:
     def cooling_stage(self) -> CoolingStage:
         return self._transformer.cooling_stage
 
-    def trigger_scenario(self) -> None:
-        self._scenario.trigger(self._sim_hours)
+    def trigger_scenario(
+        self,
+        scenario_id: ScenarioId = "heatwave_load_spike",
+        severity: float = 1.0,
+    ) -> None:
+        spec = SCENARIO_LIBRARY[scenario_id]
+        self._scenario.trigger(self._sim_hours, spec, severity)
+        self._apply_cooling_cap()
+
+    def _apply_cooling_cap(self) -> None:
+        cap = self._scenario.cooling_cap
+        self._transformer.max_available_stage = cap if cap is not None else CoolingStage.OFAF
 
     def reset(self) -> None:
         """Return the twin to its starting condition, cooling stage included.
@@ -148,6 +204,7 @@ class Simulation:
         self._sim_hours = 0.0
         self._history.clear()
         self._prime_baseline()
+        self._apply_cooling_cap()
 
     def set_cooling_stage(self, stage: CoolingStage) -> None:
         self._transformer.cooling_stage = stage
@@ -226,13 +283,18 @@ class Simulation:
             hot_spot_c=state.hotspot_c,
             aging_factor_faa=state.aging_factor_faa,
             cooling_stage=state.cooling_stage,
+            requested_cooling_stage=self._transformer.cooling_stage,
             cumulative_loss_of_life_hours=state.cumulative_loss_of_life_hours,
             status=transformer_status(state.hotspot_c, state.aging_factor_faa),
         )
+        spec = self._scenario.active_spec
         return TwinSnapshot(
             sim_time_hours=self._sim_hours,
             timestamp_ms=int(time.time() * 1000),
             twinning_rate_hz=self._twinning_rate_hz,
             ambient=AmbientConditions(air_temp_c=sp.ambient_c),
             transformer=transformer_snapshot,
+            scenario=None
+            if spec is None
+            else ActiveScenario(id=spec.id, label=spec.label, mechanism=spec.mechanism),
         )

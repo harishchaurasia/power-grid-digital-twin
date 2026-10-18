@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Query
 from api.ws_console import manager
 from sim.projection import HotSpotProjection
 from sim.scenario import Simulation
+from sim.scenarios import ScenarioSpec, library_entries
 from sim.validation import ValidationReport, transformer_validation_report
 
 MIN_HORIZON_HOURS: float = 1.0
@@ -29,6 +30,12 @@ def get_simulation() -> Simulation:
 
 
 SimulationDep = Annotated[Simulation, Depends(get_simulation)]
+
+
+@router.get("/scenarios", response_model=list[ScenarioSpec])
+def scenarios() -> list[ScenarioSpec]:
+    """The scenario library, rates and sources included."""
+    return library_entries()
 
 
 @router.get("/validation/transformer")
